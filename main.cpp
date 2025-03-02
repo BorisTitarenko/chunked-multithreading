@@ -26,7 +26,7 @@ void Parser(std::string chunk, std::string last_word)
     std::string word;
     if(last_word.size() > 0)
     {
-        word = std::move(last_word);
+        word = last_word;
     }
     for (size_t i = 0; i < chunk.size(); ++i)
     {
@@ -48,15 +48,15 @@ void SplitChunks(const char* filename)
 {
     std::string prev_word;
     std::string last_word;
-    char* chunk = new char[CHUNK_SIZE];
+
+    int fd = open(filename, O_RDONLY);
+
+    if (fd == -1) {
+        perror("Error opening file");
+        return;
+    }
     {
         ThreadPool tpool(THREDS);
-
-        int fd = open(filename, O_RDONLY);
-        if (fd == -1) {
-            perror("Error opening file");
-            return;
-        }
 
         // Get file size
         off_t file_size = lseek(fd, 0, SEEK_END);
@@ -110,6 +110,7 @@ void SplitChunks(const char* filename)
             munmap(chunk, map_size);
         }
     }
+    close(fd);
 
     global_set.insert(last_word); // very last word
 }
