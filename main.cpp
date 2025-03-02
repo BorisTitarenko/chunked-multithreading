@@ -14,8 +14,8 @@
 #include <unordered_map>
 #include <math.h>
 
-#define CHUNK_SIZE     1024*1024
-#define THREDS         4
+#define CHUNK_SIZE     64 * 1024 * 1024
+#define THREDS         16
 #define SUBCHUNK_COUNT THREDS
 
 std::mutex set_mutex;
@@ -69,6 +69,7 @@ void SplitChunks(const char* filename)
         // Process the file in chunks
         for (size_t offset = 0; offset < (size_t)file_size; offset += CHUNK_SIZE)
         {
+            // std::cout << offset << "/" << file_size << std::endl;
             size_t map_size = std::min((size_t)CHUNK_SIZE, (size_t)file_size - offset);
 
             char* chunk = static_cast<char*>(mmap(nullptr, map_size, PROT_READ, MAP_PRIVATE, fd, offset));
@@ -107,6 +108,8 @@ void SplitChunks(const char* filename)
                 last_word = *end + last_word;
                 --end;
             }
+
+            tpool.WaitForCompletion();
             munmap(chunk, map_size);
         }
     }

@@ -12,7 +12,8 @@ class ThreadPool {
     std::vector<std::thread> workers;
     std::queue<std::function<void()>> tasks;
     std::mutex queue_mutex;
-    std::condition_variable condition;
+    std::condition_variable queue_cv;
+    std::condition_variable all_done_cv;
     bool stop_flag = false;
 
 public:
@@ -46,8 +47,14 @@ public:
             tasks.emplace([task]() { (*task)(); });
         }
 
-        condition.notify_one(); // Wake up a thread
+        queue_cv.notify_one(); // Wake up a thread
         return future;
+    }
+
+    void WaitForCompletion()
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex);
+        all_done_cv.wait(lock, [this] { return tasks.empty(); });
     }
 
 private:
@@ -56,14 +63,14 @@ private:
     {
         for (size_t i = 0; i < num_threads; ++i)
         {
-            workers.emplace_back([this]
-                {
+            workers.emplace_back([this] 
+            {
                 while (true)
                 {
                     std::function<void()> task;
                     {
                         std::unique_lock<std::mutex> lock(queue_mutex);
-                        condition.wait(lock, [this] { return stop_flag || !tasks.empty(); });
+                        queue_cv.wait(lock, [this] { return stop_flag || !tasks.empty(); });
 
                         if (stop_flag && tasks.empty())
                             return;
@@ -72,6 +79,15 @@ private:
                         tasks.pop();
                     }
                     task(); // Execute the task
+
+                    // notify if all tasks are done
+                    {
+                        std::unique_lock<std::mutex> lock(queue_mutex);
+                        if (tasks.empty())
+                        {
+                            all_done_cv.notify_one();
+                        }
+                    }
                 }
             });
         }
@@ -84,7 +100,7 @@ private:
             stop_flag = true;
         }
 
-        condition.notify_all();
+        queue_cv.notify_all();
         for (std::thread &worker : workers)
             worker.join();
     }
