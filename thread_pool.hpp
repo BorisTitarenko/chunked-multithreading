@@ -14,6 +14,7 @@ class ThreadPool {
     std::mutex queue_mutex;
     std::condition_variable queue_cv;
     std::condition_variable all_done_cv;
+    std::atomic<int> active_tasks{0};
     bool stop_flag = false;
 
 public:
@@ -45,6 +46,7 @@ public:
         {
             std::unique_lock<std::mutex> lock(queue_mutex);
             tasks.emplace([task]() { (*task)(); });
+            ++active_tasks;
         }
 
         queue_cv.notify_one(); // Wake up a thread
@@ -54,7 +56,7 @@ public:
     void WaitForCompletion()
     {
         std::unique_lock<std::mutex> lock(queue_mutex);
-        all_done_cv.wait(lock, [this] { return tasks.empty(); });
+        all_done_cv.wait(lock, [this] { return tasks.empty() && active_tasks.load() == 0; });
     }
 
 private:
@@ -83,7 +85,7 @@ private:
                     // notify if all tasks are done
                     {
                         std::unique_lock<std::mutex> lock(queue_mutex);
-                        if (tasks.empty())
+                        if (--active_tasks == 0 && tasks.empty())
                         {
                             all_done_cv.notify_one();
                         }

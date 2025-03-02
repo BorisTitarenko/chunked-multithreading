@@ -13,15 +13,16 @@
 #include <string.h>
 #include <unordered_map>
 #include <math.h>
+#include <string_view>
 
 #define CHUNK_SIZE     64 * 1024 * 1024
-#define THREDS         16
+#define THREDS         4
 #define SUBCHUNK_COUNT THREDS
 
 std::mutex set_mutex;
 std::unordered_set<std::string> global_set; // global words set
 
-void Parser(std::string chunk, std::string last_word)
+void Parser(std::string_view chunk, std::string last_word)
 {
     std::string word;
     if(last_word.size() > 0)
@@ -69,7 +70,6 @@ void SplitChunks(const char* filename)
         // Process the file in chunks
         for (size_t offset = 0; offset < (size_t)file_size; offset += CHUNK_SIZE)
         {
-            // std::cout << offset << "/" << file_size << std::endl;
             size_t map_size = std::min((size_t)CHUNK_SIZE, (size_t)file_size - offset);
 
             char* chunk = static_cast<char*>(mmap(nullptr, map_size, PROT_READ, MAP_PRIVATE, fd, offset));
@@ -94,7 +94,7 @@ void SplitChunks(const char* filename)
                 
                 // pass function call into thread pool
                 // don't use futures as it doesn't return anything
-                tpool.enqueue(Parser, std::move(sub_chunk), std::move(last_word));
+                tpool.enqueue(Parser, std::string_view(start, size), std::move(last_word));
                 last_word = std::move(prev_word);
                 
             }
